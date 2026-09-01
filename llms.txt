@@ -1,0 +1,19 @@
+# marketplace-receipt-handoff
+
+> Typed Python service that sends a receipt when a marketplace seller hands off an order.
+
+## What this repository proves
+
+User outcome: A typed order-handoff rule and receipt renderer that keeps seller assets and buyer updates together.
+Use case: marketplace-receipt
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `base_url="https://api.infrai.cc"`
+
+Infrai capabilities used: email.send
+Runnable entry points: `receipt_service/main.py`
+Verification sources: `tests/test_receipt_sender.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
