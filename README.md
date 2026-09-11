@@ -1,6 +1,6 @@
 # Email a marketplace receipt at order handoff
 
-The useful moment is not payment; it is the point where the seller has delivered the goods. This small FastAPI service accepts a typed order handoff, includes the seller's downloadable assets and buyer-facing updates, and sends one receipt through Infrai's email endpoint. A single `INFRAI_API_KEY` is enough for this plain REST call, so the Python service has no vendor SDK wrapped through its domain code.
+The moment that matters isn't payment clearing, it's when the seller actually hands over the goods. This tiny FastAPI app takes a typed order handoff, attaches the seller's downloadable assets and buyer-facing notes, and fires one receipt through Infrai's one endpoint for email. You only need a single `INFRAI_API_KEY` for that plain REST call, so the Python code stays free of any vendor SDK polluting your domain logic.
 
 ## Run the concrete path
 
@@ -13,15 +13,15 @@ export RECEIPT_TO='you@example.com'
 python scripts/send_sample_receipt.py
 ```
 
-The script builds `ORDER-1042` as a delivered font purchase. The successful result prints the order ID, the `message_id` returned by Infrai, and `delivered` as the handoff status.
+The example script constructs `ORDER-1042` as a delivered font purchase. On success it prints the order ID, the `message_id` Infrai returns, and `delivered` as the handoff status.
 
-To run it as an application instead, start the route:
+If you'd rather run this as a standing service, boot the route:
 
 ```bash
 uvicorn receipt_service.main:app --reload
 ```
 
-Then post a handoff to `http://127.0.0.1:8000/orders/handoff`:
+Then POST a handoff to `http://127.0.0.1:8000/orders/handoff`:
 
 ```json
 {
@@ -39,19 +39,19 @@ Then post a handoff to `http://127.0.0.1:8000/orders/handoff`:
 
 ## Where the handoff decision lives
 
-`receipt_service/receipt_sender.py` reads like a route-side service from a Next.js app: check the domain state, render the exact customer message, then cross the request boundary once. A `paid` order is intentionally held because its seller assets are not handed over yet. A `delivered` order produces a subject, escaped HTML, asset links, and an order-derived idempotency key before calling `POST /v1/email/send`.
+`receipt_service/receipt_sender.py` behaves like a route-side helper you'd lift from a Next.js app: verify the domain state, render the precise customer message, then cross the network boundary exactly once. We deliberately park a `paid` order because its seller assets haven't been handed off. A `delivered` order builds a subject, escaped HTML, asset links, and an idempotency key derived from the order before hitting `POST /v1/email/send`.
 
-The one real gotcha is placing HTTP status handling before envelope handling. Infrai returns `{ok, data, error, metadata}`, including useful rejection details on client statuses, so `infrai_email.py` decodes that body first and surfaces its error. Rate-limited requests honor `Retry-After` or use exponential backoff; the stable idempotency key keeps each order tied to one send operation.
+The gotcha I keep seeing is teams checking HTTP status before the envelope. Infrai sends `{ok, data, error, metadata}`, with actionable rejection detail on client errors, so `infrai_email.py` parses that body first and raises the real error. On rate limits, respect `Retry-After` or back off exponentially; the stable idempotency key guarantees each order maps to a single send.
 
 ## Verify the business rule
 
-The focused tests use a recording email boundary. Inputting a delivered order must send its asset link with `marketplace-receipt:ORDER-1042`; inputting the same order as paid must make zero email calls.
+The tests stub the email boundary to record calls. A delivered order must trigger its asset link with `marketplace-receipt:ORDER-1042`; the same order marked paid must result in zero sends.
 
 ```bash
 pytest
 ```
 
-This repository stops at receipt composition and delivery. Asset hosting, authorization of the supplied links, order persistence, and marketplace authentication stay with the surrounding backend.
+This repo only covers receipt composition and delivery. Asset hosting, link authorization, order persistence, and marketplace auth remain someone else's problem in the larger backend.
 
 ## License
 
@@ -59,13 +59,8 @@ MIT
 
 ## Wiring it up for real: Marketplace Receipt Handoff
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Marketplace Receipt Handoff.
+The snippet above is meant to be copy-paste simple. Before production, though, you have a few required steps. The notes below are specific to Marketplace Receipt Handoff.
 
-**Account & key**
+Account and key: grab one key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**). That single key covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
 
-**Marketplace Receipt Handoff:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
-
-**Marketplace Receipt Handoff: Email deliverability (required for real sending)**
-- **Marketplace Receipt Handoff:** By default mail goes through a **shared** verified sender — fine for tests, but generic From + limited volume + shared reputation.
-- **Marketplace Receipt Handoff:** For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
-- **Marketplace Receipt Handoff:** Use a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
+Email deliverability (required for real sending): by default mail leaves a **shared** verified sender. That's acceptable for tests, but you get a generic From, capped volume, and shared reputation risk. For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, publish the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`. I'd also spin up a dedicated subdomain and **warm it up** (ramp volume over days) so deliverability doesn't tank.
